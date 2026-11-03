@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f7f5">
+    <title>Supply Room — Inventory</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#" aria-label="Supply Room home">
+          <span class="brand-mark" aria-hidden="true">s</span>
+          <span class="brand-name">supply<span>room</span></span>
+        </a>
+        <div class="workspace-label">WORKSPACE</div>
+        <div class="practice-switcher">
+          <span class="practice-icon">✳</span>
+          <span><strong>Northside Dental</strong><small>General dentistry</small></span>
+          <span class="switcher-chevron" aria-hidden="true">⌄</span>
+        </div>
+        <nav class="side-nav" aria-label="Main navigation">
+          <a class="nav-link" href="#overview"><span class="nav-icon">◫</span>Overview</a>
+          <a class="nav-link active" href="#inventory"><span class="nav-icon">▤</span>Inventory<span class="nav-count" id="nav-count">0</span></a>
+          <a class="nav-link" href="#equipment-panel" id="equipment-nav-link"><span class="nav-icon">⌁</span>Equipment</a>
+          <a class="nav-link" href="#reorder-panel"><span class="nav-icon">↻</span>Reorder queue<span class="nav-dot" id="nav-dot"></span></a>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="cloud-status"><span class="cloud-icon">▤</span><span><strong>Practice workspace</strong><small>Saved on this browser</small></span><i></i></div>
+          <div class="profile">
+            <div class="avatar">MR</div>
+            <span><strong>Morgan Reed</strong><small>Office manager</small></span>
+            <button class="more-button" aria-label="Profile options">···</button>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumb"><span>Workspace</span><span class="crumb-separator">/</span><strong>Inventory</strong></div>
+          <div class="topbar-actions">
+            <span class="today-label"><span class="calendar-icon">▦</span><span id="today-label"></span></span>
+            <button class="icon-button notification-button" aria-label="Notifications">♧<span class="notification-dot"></span></button>
+            <div class="top-avatar">MR</div>
+          </div>
+        </header>
+
+        <div class="page-content">
+          <section class="page-heading" id="overview">
+            <div>
+              <p class="eyebrow">YOUR PRACTICE, IN GOOD SUPPLY</p>
+              <h1>Inventory</h1>
+              <p class="page-subtitle">A clear view of what you have, what you use, and what’s next.</p>
+            </div>
+            <div class="heading-actions">
+              <button class="button button-secondary" id="import-button"><span class="button-symbol">↑</span> Import CSV</button>
+              <input id="csv-file" type="file" accept=".csv,text/csv" hidden>
+              <button class="button button-secondary" id="export-button"><span class="button-symbol">↓</span> Export</button>
+              <button class="button button-primary" id="add-item-button"><span class="plus">+</span> Add item</button>
+            </div>
+          </section>
+
+          <section class="stats-grid" aria-label="Inventory summary">
+            <article class="stat-card">
+              <div class="stat-label">Items tracked <span class="stat-icon mint">▤</span></div>
+              <div class="stat-value" id="stat-items">0</div>
+              <div class="stat-foot"><span class="foot-dot green-dot"></span> Across your supply room</div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-label">Need attention <span class="stat-icon coral">↗</span></div>
+              <div class="stat-value" id="stat-attention">0</div>
+              <div class="stat-foot"><span class="foot-highlight" id="attention-caption">All supplies looking good</span></div>
+            </article>
+            <article class="stat-card budget-card">
+              <button class="budget-edit" id="budget-edit-button" aria-label="Set monthly budget">Edit</button>
+              <div class="stat-label">Monthly budget <span class="stat-icon blue">＄</span></div>
+              <div class="stat-value" id="stat-budget">$0</div>
+              <div class="budget-track"><div id="budget-fill" class="budget-fill"></div></div>
+              <div class="stat-foot" id="budget-caption">Set a monthly budget to track purchases</div>
+            </article>
+            <article class="stat-card capacity-card">
+              <div class="stat-label">Procedure links <span class="stat-icon violet">✳</span></div>
+              <div class="stat-value"><span id="stat-procedure-links">0</span><span class="value-unit"> supplies</span></div>
+              <div class="stat-foot">Materials mapped to TDO procedures</div>
+            </article>
+          </section>
+
+          <div class="integration-notice"><span>i</span><p><strong>TDO12 sync isn’t connected yet.</strong> Procedure links can be set up here; automatic stock updates need your TDO12 integration details.</p></div>
+
+          <section class="reorder-panel" id="reorder-panel">
+            <div class="reorder-heading">
+              <div class="reorder-title-wrap">
+                <span class="reorder-bell">⌁</span>
+                <div><h2>Reorder queue <span id="queue-count" class="queue-count">0</span></h2><p>Based on minimum stock and configured procedure usage</p></div>
+              </div>
+              <button class="text-button" id="view-queue-button">View all <span>→</span></button>
+            </div>
+            <div id="reorder-list" class="reorder-list"></div>
+          </section>
+
+          <section class="inventory-section" id="inventory">
+            <div class="inventory-heading">
+              <div><h2>Your inventory</h2><p>Track everyday supplies and durable practice equipment.</p></div>
+              <div class="inventory-heading-actions">
+                <button class="button button-tertiary" id="log-purchase-button"><span class="button-symbol">＄</span> Log purchase</button>
+              </div>
+            </div>
+            <div class="inventory-tabs" role="tablist" aria-label="Inventory type">
+              <button class="inventory-tab active" id="clinical-tab" role="tab" aria-selected="true" aria-controls="supplies-panel">Clinical <span id="clinical-tab-count"></span></button>
+              <button class="inventory-tab" id="office-tab" role="tab" aria-selected="false" aria-controls="supplies-panel">Office <span id="office-tab-count"></span></button>
+              <button class="inventory-tab" id="equipment-tab" role="tab" aria-selected="false" aria-controls="equipment-panel">Equipment <span id="equipment-tab-count"></span></button>
+            </div>
+            <div id="supplies-panel" role="tabpanel" aria-labelledby="clinical-tab">
+            <div class="table-toolbar">
+              <label class="search-box"><span class="search-icon">⌕</span><input id="search-input" type="search" placeholder="Search supplies or suppliers…" autocomplete="off"></label>
+              <label class="filter-wrap"><span class="filter-icon">☷</span><select id="category-filter" aria-label="Filter by category"><option value="all">All categories</option></select><span class="select-chevron">⌄</span></label>
+              <label class="filter-wrap status-filter"><select id="status-filter" aria-label="Filter by stock status"><option value="all">All stock</option><option value="attention">Needs attention</option><option value="healthy">In good shape</option></select><span class="select-chevron">⌄</span></label>
+              <button class="button button-tertiary manage-categories-button" id="manage-categories-button">Manage categories</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th class="supply-column">SUPPLY</th><th>STOCK ON HAND</th><th id="usage-header">USES LEFT</th><th>UNIT PRICE</th><th>SUPPLIER</th><th>ORDER CYCLE</th><th><span class="sr-only">Actions</span></th>
+                </tr></thead>
+                <tbody id="inventory-body"></tbody>
+              </table>
+              <div class="empty-state" id="empty-state" hidden>
+                <span class="empty-icon">⌕</span><strong>No supplies found</strong><p>Try a different search or add your first item.</p>
+                <button class="button button-secondary" id="empty-add-button">Add an item</button>
+              </div>
+            </div>
+            <div class="table-footer"><span id="result-count">Showing 0 items</span><span class="footer-note"><span class="sync-check">✓</span> Changes save automatically</span></div>
+            </div>
+            <div id="equipment-panel" role="tabpanel" aria-labelledby="equipment-tab" hidden>
+              <div class="equipment-toolbar"><p>Record purchase details, warranties, and repair history for equipment you keep.</p><button class="button button-primary" id="add-equipment-button"><span class="plus">+</span> Add equipment</button></div>
+              <div class="table-wrap">
+                <table class="equipment-table">
+                  <thead><tr><th>EQUIPMENT</th><th>PURCHASE</th><th>WARRANTY</th><th>SERVICE & REPAIRS</th><th>ISSUES</th><th>DEALER</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                  <tbody id="equipment-body"></tbody>
+                </table>
+                <div class="empty-state" id="equipment-empty-state">
+                  <span class="empty-icon">⌁</span><strong>No equipment tracked yet</strong><p>Add larger items to keep their purchase, warranty, and repair records together.</p>
+                  <button class="button button-secondary" id="equipment-empty-add-button">Add equipment</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <footer class="page-footer"><span>Good systems make room for great care.</span><span>SUPPLY ROOM <i>·</i> BUILT FOR YOUR PRACTICE</span></footer>
+        </div>
+      </main>
+    </div>
+
+    <dialog id="item-dialog" class="modal">
+      <form id="item-form">
+        <div class="modal-heading"><div><p class="eyebrow">SUPPLY DETAILS</p><h2 id="item-dialog-title">Add an item</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Close">×</button></div>
+        <input type="hidden" id="item-id">
+        <div class="form-grid">
+          <label class="form-field full-field">Item name<input id="item-name" name="name" required maxlength="80" placeholder="e.g. Universal composite"></label>
+          <label class="form-field">Category<select id="item-category" name="category" required>
+            <option value="Clinical disposable">Clinical disposable</option><option value="Office supplies">Office supplies</option><option value="Non-disposable">Non-disposable</option><option value="Other">Other</option>
+          </select></label>
+          <label class="form-field">Quantity on hand<input id="item-quantity" name="quantity" type="number" min="0" step="any" required placeholder="0"></label>
+          <label class="form-field">Quantity unit<input id="item-unit" name="unit" maxlength="24" placeholder="e.g. boxes, cases"></label>
+          <label class="form-field" id="minimum-quantity-field" hidden>Alert me at this quantity or below<input id="item-minimum" name="minimumQuantity" type="number" min="0" step="any" placeholder="e.g. 2"></label>
+          <label class="form-field">Unit price ($)<input id="item-price" name="unitPrice" type="number" min="0" step="0.01" required placeholder="0.00"></label>
+          <label class="form-field">Supplier / dealer<input id="item-supplier" name="supplier" maxlength="80" placeholder="e.g. Henry Schein"></label>
+          <label class="form-field">Dealer website<input id="item-url" name="supplierUrl" type="url" placeholder="https://"></label>
+          <label class="form-field">Online ordering login (optional)<input id="item-login-url" name="supplierLoginUrl" type="url" placeholder="https://"></label>
+          <label class="form-field">Dealer contact<input id="item-contact" name="supplierContact" maxlength="120" placeholder="Email or phone"></label>
+          <label class="form-field">Order frequency (days)<input id="item-frequency" name="orderFrequencyDays" type="number" min="1" step="1" placeholder="30"></label>
+          <div id="procedure-fields" class="full-field form-grid">
+            <div class="form-divider full-field"><span>TDO PROCEDURE LINKS</span></div>
+            <label class="form-field full-field">Linked procedure names or codes<input id="item-procedures" name="procedureLinks" maxlength="240" placeholder="e.g. Apicoectomy, procedure code"><small class="field-help">Separate multiple names or codes with commas.</small></label>
+            <label class="form-field">Units used per procedure<input id="item-usage" name="unitsPerTreatment" type="number" min="0" step="any" placeholder="e.g. 1"></label>
+            <label class="form-field">Remind me when uses left<input id="item-threshold" name="reorderThresholdTreatments" type="number" min="0" step="1" placeholder="e.g. 10"></label>
+            <p class="form-hint full-field">These links are saved for setup, but stock will not decrement automatically until TDO12 is connected.</p>
+          </div>
+        </div>
+        <div class="modal-actions"><button type="button" class="button button-secondary" data-close-dialog>Cancel</button><button type="submit" class="button button-primary">Save item</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="categories-dialog" class="modal small-modal">
+      <form id="categories-form">
+        <div class="modal-heading"><div><p class="eyebrow">INVENTORY SETTINGS</p><h2 id="categories-dialog-title">Manage categories</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Close">×</button></div>
+        <p class="form-hint category-hint">Rename or remove categories, or add your own. Categories in use can be renamed but not removed.</p>
+        <div id="category-editor-list" class="category-editor-list"></div>
+        <div class="category-add-row"><label class="form-field">New category<input id="new-category-name" maxlength="40" placeholder="e.g. Lab supplies"></label><button type="button" class="button button-secondary" id="add-category-button">Add</button></div>
+        <div class="modal-actions"><button type="button" class="button button-secondary" data-close-dialog>Cancel</button><button type="submit" class="button button-primary">Save categories</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="backorder-dialog" class="modal small-modal">
+      <form id="backorder-form">
+        <div class="modal-heading"><div><p class="eyebrow">ORDER STATUS</p><h2>Flag as backordered</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Close">×</button></div>
+        <p class="quantity-item-name" id="backorder-item-name"></p>
+        <input type="hidden" id="backorder-item-id">
+        <label class="form-field">Date ordered<input id="backorder-ordered-date" type="date" required></label>
+        <label class="form-field backorder-eta-field">Expected delivery date (optional)<input id="backorder-eta" type="date"></label>
+        <label class="form-field backorder-note-field">Order note<input id="backorder-note" maxlength="160" placeholder="Optional confirmation or reference"></label>
+        <p class="form-hint backorder-suggestion-note">Alternative supplier links search vendor sites for this product name; they don’t verify live stock.</p>
+        <div class="modal-actions"><button type="button" class="button button-secondary" id="clear-backorder-button" hidden>Clear flag</button><button type="button" class="button button-secondary" data-close-dialog>Cancel</button><button type="submit" class="button button-primary">Save backorder</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="quantity-dialog" class="modal small-modal">
+      <form id="quantity-form">
+        <div class="modal-heading"><div><p class="eyebrow">STOCK UPDATE</p><h2 id="quantity-title">Receive stock</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Close">×</button></div>
+        <p class="quantity-item-name" id="quantity-item-name"></p>
+        <input type="hidden" id="quantity-item-id">
+        <label class="form-field">Quantity received<input id="quantity-amount" type="number" min="0.01" step="any" required placeholder="Enter quantity"></label>
+        <div class="modal-actions"><button type="button" class="button button-secondary" data-close-dialog>Cancel</button><button type="submit" class="button button-primary">Receive stock</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="budget-dialog" class="modal small-modal">
+      <form id="budget-form">
+        <div class="modal-heading"><div><p class="eyebrow">MONTHLY SPENDING PLAN</p><h2>Set monthly budget</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Close">×</button></div>
+        <label class="form-field">Monthly budget ($)<input id="budget-amount" type="number" min="0" step="0.01" required placeholder="e.g. 2500"></label>
+        <p class="form-hint budget-hint">Spending is calculated from purchases and repairs you log this month.</p>
+        <div class="modal-actions"><button type="button" class="button button-secondary" data-close-dialog>Cancel</button><button type="submit" class="button button-primary">Save budget</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="purchase-dialog" class="modal small-modal">
+      <form id="purchase-form">
+        <div class="modal-heading"><div><p class="eyebrow">MONTHLY BUDGET</p><h2>Log a purchase</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Close">×</button></div>
+        <label class="form-field">Supply<select id="purchase-item" required></select></label>
+        <div class="form-grid purchase-fields">
+          <label class="form-field">Purchase total ($)<input id="purchase-total" type="number" min="0.01" step="0.01" required placeholder="0.00"></label>
+          <label class="form-field">Quantity received (optional)<input id="purchase-quantity" type="number" min="0" step="any" placeholder="0"></label>
+          <label class="form-field full-field">Purchase date<input id="purchase-date" type="date" required></label>
+        </div>
+        <div class="modal-actions"><button type="button" class="button button-secondary" data-close-dialog>Cancel</button><button type="submit" class="button button-primary">Save purchase</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="equipment-dialog" class="modal">
+      <form id="equipment-form">
+        <div class="modal-heading"><div><p class="eyebrow">DURABLE ASSET</p><h2 id="equipment-dialog-title">Add equipment</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Close">×</button></div>
+        <input type="hidden" id="equipment-id">
+        <div class="form-grid">
+          <label class="form-field full-field">Equipment name<input id="equipment-name" required maxlength="100" placeholder="e.g. Digital X-ray sensor"></label>
+          <label class="form-field">Type<select id="equipment-category"><option>Clinical equipment</option><option>Office equipment</option><option>IT & software</option><option>Other</option></select></label>
+          <label class="form-field">Serial / asset number<input id="equipment-serial" maxlength="80" placeholder="Optional"></label>
+          <label class="form-field">Purchase date<input id="equipment-purchase-date" type="date"></label>
+          <label class="form-field">Purchase price ($)<input id="equipment-purchase-price" type="number" min="0" step="0.01" placeholder="0.00"></label>
+          <label class="form-field">Warranty expiration<input id="equipment-warranty" type="date"></label>
+          <label class="form-field">Dealer / service provider<input id="equipment-supplier" maxlength="80" placeholder="Supplier name"></label>
+          <label class="form-field">Dealer contact<input id="equipment-contact" maxlength="120" placeholder="Email or phone"></label>
+          <label class="form-field">Dealer website<input id="equipment-url" type="url" placeholder="https://"></label>
+          <label class="form-field">Online ordering login (optional)<input id="equipment-login-url" type="url" placeholder="https://"></label>
+          <div class="form-divider full-field"><span>REPAIR PROVIDER</span></div>
+          <label class="form-field">Repair company<input id="repair-provider-name" maxlength="100" placeholder="Service company or technician"></label>
+          <label class="form-field">Repair contact<input id="repair-provider-contact" maxlength="120" placeholder="Phone or email"></label>
+          <label class="form-field full-field">Repair company website<input id="repair-provider-url" type="url" placeholder="https://"></label>
+          <label class="form-field full-field">Notes<textarea id="equipment-notes" maxlength="500" rows="2" placeholder="Model, location, service plan…"></textarea></label>
+          <p class="form-hint full-field" id="equipment-budget-hint">A new equipment purchase is included in this month’s budget when a price is entered.</p>
+        </div>
+        <div class="modal-actions"><button type="button" class="button button-secondary" data-close-dialog>Cancel</button><button type="submit" class="button button-primary">Save equipment</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="repair-dialog" class="modal small-modal">
+      <form id="repair-form">
+        <div class="modal-heading"><div><p class="eyebrow">SERVICE RECORD</p><h2>Log a repair</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Close">×</button></div>
+        <p class="quantity-item-name" id="repair-equipment-name"></p>
+        <input type="hidden" id="repair-equipment-id">
+        <label class="form-field">Repair / service performed<input id="repair-description" required maxlength="160" placeholder="e.g. Sensor cable replacement"></label>
+        <div class="form-grid purchase-fields">
+          <label class="form-field">Service date<input id="repair-date" type="date" required></label>
+          <label class="form-field">Cost ($)<input id="repair-cost" type="number" min="0" step="0.01" placeholder="0.00"></label>
+        </div>
+        <div class="modal-actions"><button type="button" class="button button-secondary" data-close-dialog>Cancel</button><button type="submit" class="button button-primary">Save repair</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="issue-dialog" class="modal small-modal">
+      <form id="issue-form">
+        <div class="modal-heading"><div><p class="eyebrow">EQUIPMENT SERVICE LOG</p><h2>Log an issue</h2></div><button type="button" class="modal-close" data-close-dialog aria-label="Close">×</button></div>
+        <p class="quantity-item-name" id="issue-equipment-name"></p>
+        <input type="hidden" id="issue-equipment-id">
+        <label class="form-field">Issue summary<input id="issue-description" required maxlength="160" placeholder="e.g. Sensor intermittently disconnects"></label>
+        <label class="form-field issue-details-field">Details<textarea id="issue-details" maxlength="500" rows="3" placeholder="Symptoms, troubleshooting, or service request details"></textarea></label>
+        <label class="form-field issue-date-field">Reported date<input id="issue-date" type="date" required></label>
+        <div class="modal-actions"><button type="button" class="button button-secondary" data-close-dialog>Cancel</button><button type="submit" class="button button-primary">Save issue</button></div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
