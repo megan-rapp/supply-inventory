@@ -1,3 +1,8 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 const STORAGE_KEY = 'supply-room-inventory-v1';
 const EQUIPMENT_KEY = 'supply-room-equipment-v1';
 const EXPENSES_KEY = 'supply-room-expenses-v1';
@@ -33,6 +38,7 @@ function saveBudget() {
     console.error('Unable to save monthly budget.', error);
     showToast('Could not save your monthly budget in this browser.');
   }
+  scheduleWorkspaceSave();
 }
 
 function loadCategories() {
@@ -88,9 +94,340 @@ let monthlyBudget = loadBudget();
 let activeQueueFilter = false;
 let activeInventoryTab = 'clinical';
 let toastTimer;
+let currentUser = null;
+let currentWorkspaceId = null;
+let loadingUserId = null;
+let isHydrated = false;
+let currentRevision = 0;
+let syncConflict = false;
+let isSaving = false;
+let workspaceChannel = null;
+let saveTimer;
+let saveQueue = Promise.resolve();
+let saveVersion = 0;
+let signUpMode = false;
 const $ = (selector) => document.querySelector(selector);
 const itemDialog = $('#item-dialog');
 const quantityDialog = $('#quantity-dialog');
+
+function setSyncStatus(message, state = '') {
+  const status = $('#sync-status');
+  status.textContent = message;
+  status.dataset.state = state;
+}
+
+function localWorkspaceData() {
+  return { items, equipment, expenses, monthlyBudget, categories };
+}
+
+function applyWorkspaceData(data) {
+  if (!data || !Array.isArray(data.items) || !Array.isArray(data.equipment)
+      || !Array.isArray(data.expenses) || !data.categories
+      || !Array.isArray(data.categories.clinical) || !Array.isArray(data.categories.office)
+      || (data.monthlyBudget !== null && (!Number.isFinite(data.monthlyBudget) || data.monthlyBudget < 0))) {
+    throw new Error('The saved workspace data has an invalid format.');
+  }
+  categories = data.categories;
+  items = data.items;
+  equipment = data.equipment;
+  expenses = data.expenses;
+  monthlyBudget = data.monthlyBudget;
+  try {
+    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(EQUIPMENT_KEY, JSON.stringify(equipment));
+    localStorage.setItem(EXPENSES_KEY, JSON.stringify(expenses));
+    if (monthlyBudget === null) localStorage.removeItem(BUDGET_KEY);
+    else localStorage.setItem(BUDGET_KEY, String(monthlyBudget));
+  } catch (error) {
+    console.warn('Workspace loaded, but the browser cache could not be updated.', error);
+  }
+}
+
+function scheduleWorkspaceSave() {
+  if (!currentUser || !isHydrated || syncConflict) return;
+  const version = ++saveVersion;
+  const ownerId = currentUser.id;
+  const workspaceId = currentWorkspaceId;
+  clearTimeout(saveTimer);
+  setSyncStatus('Saving changes…', 'saving');
+  saveTimer = setTimeout(() => {
+    const data = localWorkspaceData();
+    saveQueue = saveQueue.then(async () => {
+      if (currentUser?.id !== ownerId || currentWorkspaceId !== workspaceId || !workspaceId) return;
+      if (syncConflict) return;
+      isSaving = true;
+      const { data: updated, error } = await supabase.from('workspace_data').update({
+        data,
+        updated_by: ownerId,
+        updated_at: new Date().toISOString(),
+        revision: currentRevision + 1
+      }).eq('workspace_id', workspaceId).eq('revision', currentRevision).select('revision').maybeSingle();
+      if (error) throw error;
+      if (!updated) {
+        syncConflict = true;
+        if (version === saveVersion) {
+          setSyncStatus('Sync conflict — reload', 'error');
+          showToast('A teammate changed this workspace. Reload the page before making more changes.');
+        }
+        return;
+      }
+      currentRevision = updated.revision;
+      if (version === saveVersion && !syncConflict) setSyncStatus('All changes saved', 'saved');
+    }).catch((error) => {
+      console.error('Unable to sync workspace data with Supabase.', error);
+      if (version === saveVersion) {
+        setSyncStatus('Sync failed', 'error');
+        showToast('Could not sync changes. Check your connection and Supabase setup.');
+      }
+    }).finally(() => {
+      isSaving = false;
+    });
+  }, 300);
+}
+
+function subscribeToWorkspaceChanges() {
+  if (workspaceChannel) supabase.removeChannel(workspaceChannel);
+  workspaceChannel = supabase.channel(`workspace-${currentWorkspaceId}`)
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'workspace_data',
+      filter: `workspace_id=eq.${currentWorkspaceId}`
+    }, (payload) => {
+      const updated = payload.new;
+      if (!isHydrated || !currentWorkspaceId) return;
+      if (updated.updated_by === currentUser?.id || updated.revision <= currentRevision) return;
+      if (saveTimer || isSaving) {
+        syncConflict = true;
+        setSyncStatus('Sync conflict — reload', 'error');
+        showToast('A teammate changed this workspace. Reload the page before making more changes.');
+        return;
+      }
+      try {
+        applyWorkspaceData(updated.data);
+        currentRevision = updated.revision;
+        render();
+        showToast('Workspace updated by a teammate.');
+      } catch (error) {
+        console.error('Unable to apply a workspace update.', error);
+        setSyncStatus('Sync failed', 'error');
+        showToast('A teammate update could not be loaded. Reload the page to try again.');
+      }
+    })
+    .subscribe((status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.error(`Supabase workspace updates subscription status: ${status}.`);
+      }
+    });
+}
+
+function showAuthScreen(message = '', setupWorkspace = false) {
+  $('.app-shell').hidden = true;
+  $('#auth-screen').hidden = false;
+  $('#auth-form').hidden = setupWorkspace;
+  $('#auth-toggle').hidden = setupWorkspace;
+  $('#workspace-setup').hidden = !setupWorkspace;
+  if (setupWorkspace) {
+    $('#auth-title').textContent = 'Set up your workspace';
+    $('#auth-description').textContent = 'Create a workspace for your practice or join your team.';
+  } else {
+    $('#auth-title').textContent = signUpMode ? 'Create your account' : 'Sign in to Supply Room';
+    $('#auth-description').textContent = signUpMode
+      ? 'Create an account to start a synced practice workspace.'
+      : 'Your practice inventory, available wherever you work.';
+  }
+  $('#auth-feedback').textContent = message;
+}
+
+async function openWorkspace(user) {
+  if (!user || currentUser?.id === user.id && (isHydrated || loadingUserId === user.id)) return;
+  currentUser = user;
+  currentWorkspaceId = null;
+  currentRevision = 0;
+  syncConflict = false;
+  loadingUserId = user.id;
+  isHydrated = false;
+  setSyncStatus('Loading workspace…');
+  try {
+    const { data: membership, error: membershipError } = await supabase.from('workspace_members')
+      .select('workspace_id, workspaces!inner(id, name, invite_code)')
+      .eq('user_id', user.id).maybeSingle();
+    if (membershipError) throw membershipError;
+    if (!membership) {
+      loadingUserId = null;
+      showAuthScreen('', true);
+      return;
+    }
+    const workspace = membership.workspaces;
+    currentWorkspaceId = membership.workspace_id;
+    const { data: row, error } = await supabase.from('workspace_data')
+      .select('data, revision').eq('workspace_id', currentWorkspaceId).maybeSingle();
+    if (error) throw error;
+    if (row) applyWorkspaceData(row.data);
+    else {
+      const { data: inserted, error: saveError } = await supabase.from('workspace_data').insert({
+        workspace_id: currentWorkspaceId,
+        data: localWorkspaceData(),
+        updated_by: user.id
+      }).select('revision').single();
+      if (saveError) throw saveError;
+      currentRevision = inserted.revision;
+    }
+    if (row) currentRevision = row.revision;
+    if (currentUser?.id !== user.id) return;
+    isHydrated = true;
+    loadingUserId = null;
+    $('.app-shell').hidden = false;
+    $('#auth-screen').hidden = true;
+    $('#practice-name').textContent = workspace.name;
+    $('#workspace-invite-code').textContent = workspace.invite_code;
+    $('#profile-name').textContent = user.email || 'Practice member';
+    const initials = (user.email || 'PR').split('@')[0].split(/[._-]/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('');
+    $('.avatar').textContent = initials || 'PR';
+    $('.top-avatar').textContent = initials || 'PR';
+    setSyncStatus('All changes saved', 'saved');
+    render();
+    subscribeToWorkspaceChanges();
+  } catch (error) {
+    console.error('Unable to load the Supabase workspace.', error);
+    currentWorkspaceId = null;
+    loadingUserId = null;
+    currentUser = null;
+    showAuthScreen(`Could not load your workspace: ${error.message}`);
+  }
+}
+
+function initializeAuth() {
+  if (!supabase) {
+    $('#auth-description').textContent = 'Connect this deployment to Supabase to sign in and sync your practice data.';
+    $('#auth-feedback').textContent = 'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your Vercel project settings, then redeploy.';
+    $('#auth-form').hidden = true;
+    $('#auth-toggle').hidden = true;
+    return;
+  }
+  supabase.auth.onAuthStateChange((_event, session) => {
+    if (session?.user) {
+      openWorkspace(session.user).catch((error) => {
+        console.error('Unable to open the workspace.', error);
+        showAuthScreen('Unable to open your workspace. Please try again.');
+      });
+    } else {
+      currentUser = null;
+      currentWorkspaceId = null;
+      loadingUserId = null;
+      isHydrated = false;
+      clearTimeout(saveTimer);
+      if (workspaceChannel) {
+        supabase.removeChannel(workspaceChannel);
+        workspaceChannel = null;
+      }
+      showAuthScreen();
+    }
+  });
+  supabase.auth.getSession().then(({ data, error }) => {
+    if (error) throw error;
+    if (data.session?.user) return openWorkspace(data.session.user);
+    showAuthScreen();
+  }).catch((error) => {
+    console.error('Unable to check the Supabase session.', error);
+    showAuthScreen('Could not connect to Supabase. Check your configuration and try again.');
+  });
+}
+
+$('#auth-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!supabase) return;
+  const submitButton = $('#auth-submit');
+  const email = $('#auth-email').value.trim();
+  const password = $('#auth-password').value;
+  submitButton.disabled = true;
+  $('#auth-feedback').textContent = signUpMode ? 'Creating your account…' : 'Signing in…';
+  try {
+    const result = signUpMode
+      ? await supabase.auth.signUp({ email, password })
+      : await supabase.auth.signInWithPassword({ email, password });
+    if (result.error) throw result.error;
+    if (signUpMode && !result.data.session) {
+      $('#auth-feedback').textContent = 'Check your email to confirm your account, then sign in.';
+    } else {
+      $('#auth-feedback').textContent = '';
+    }
+  } catch (error) {
+    console.error('Authentication failed.', error);
+    $('#auth-feedback').textContent = error.message || 'Authentication failed. Please try again.';
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+$('#auth-toggle').addEventListener('click', () => {
+  signUpMode = !signUpMode;
+  $('#auth-title').textContent = signUpMode ? 'Create your account' : 'Sign in to Supply Room';
+  $('#auth-description').textContent = signUpMode
+    ? 'Create an account to start a synced practice workspace.'
+    : 'Your practice inventory, available wherever you work.';
+  $('#auth-submit').textContent = signUpMode ? 'Create account' : 'Sign in';
+  $('#auth-toggle').textContent = signUpMode ? 'Already have an account? Sign in' : 'Need an account? Sign up';
+  $('#auth-password').autocomplete = signUpMode ? 'new-password' : 'current-password';
+  $('#auth-feedback').textContent = '';
+});
+
+$('#sign-out-button').addEventListener('click', async () => {
+  if (!supabase) return;
+  await signOut();
+});
+
+async function signOut() {
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  } catch (error) {
+    console.error('Unable to sign out.', error);
+    if ($('.app-shell').hidden) $('#auth-feedback').textContent = 'Could not sign out. Please try again.';
+    else showToast('Could not sign out. Please try again.');
+  }
+}
+
+$('#create-workspace-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  button.disabled = true;
+  $('#auth-feedback').textContent = 'Creating your workspace…';
+  try {
+    const { error } = await supabase.rpc('create_practice_workspace', {
+      workspace_name: $('#new-workspace-name').value.trim()
+    });
+    if (error) throw error;
+    await openWorkspace(currentUser);
+  } catch (error) {
+    console.error('Unable to create practice workspace.', error);
+    $('#auth-feedback').textContent = error.message || 'Could not create the workspace.';
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('#join-workspace-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  button.disabled = true;
+  $('#auth-feedback').textContent = 'Joining your workspace…';
+  try {
+    const { error } = await supabase.rpc('join_practice_workspace', {
+      workspace_invite_code: $('#workspace-invite-input').value.trim()
+    });
+    if (error) throw error;
+    await openWorkspace(currentUser);
+  } catch (error) {
+    console.error('Unable to join practice workspace.', error);
+    $('#auth-feedback').textContent = error.message || 'Could not join the workspace.';
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('#setup-sign-out-button').addEventListener('click', signOut);
 
 function loadStoredList(key, fallback) {
   try {
@@ -126,6 +463,7 @@ function saveItems() {
     console.error('Unable to save inventory.', error);
     showToast('Could not save your changes in this browser.');
   }
+  scheduleWorkspaceSave();
 }
 
 function saveEquipment() {
@@ -135,6 +473,7 @@ function saveEquipment() {
     console.error('Unable to save equipment records.', error);
     showToast('Could not save your equipment in this browser.');
   }
+  scheduleWorkspaceSave();
 }
 
 function saveExpenses() {
@@ -144,6 +483,7 @@ function saveExpenses() {
     console.error('Unable to save purchase records.', error);
     showToast('Could not save your purchase record in this browser.');
   }
+  scheduleWorkspaceSave();
 }
 
 function dateInputValue(date = new Date()) {

@@ -5,11 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f6f7f5">
     <title>Supply Room — Inventory</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="app.js" defer></script>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/app.js"></script>
   </head>
   <body>
-    <div class="app-shell">
+    <main id="auth-screen" class="auth-screen">
+      <section class="auth-card" aria-labelledby="auth-title">
+        <a class="brand auth-brand" href="#" aria-label="Supply Room home">
+          <span class="brand-mark" aria-hidden="true">s</span>
+          <span class="brand-name">supply<span>room</span></span>
+        </a>
+        <p class="eyebrow">PRACTICE INVENTORY</p>
+        <h1 id="auth-title">Sign in to Supply Room</h1>
+        <p id="auth-description" class="auth-description">Your practice inventory, available wherever you work.</p>
+        <form id="auth-form">
+          <label class="form-field">Email address<input id="auth-email" type="email" autocomplete="email" required></label>
+          <label class="form-field">Password<input id="auth-password" type="password" autocomplete="current-password" minlength="8" required></label>
+          <button id="auth-submit" class="button button-primary auth-submit" type="submit">Sign in</button>
+        </form>
+        <button id="auth-toggle" class="text-button auth-toggle" type="button">Need an account? Sign up</button>
+        <section id="workspace-setup" class="workspace-setup" hidden>
+          <h2>Choose a practice workspace</h2>
+          <p>Start a new workspace or join your team with an invite code.</p>
+          <form id="create-workspace-form">
+            <label class="form-field">Practice name<input id="new-workspace-name" maxlength="80" required placeholder="e.g. Northside Dental"></label>
+            <button class="button button-primary auth-submit" type="submit">Create workspace</button>
+          </form>
+          <div class="workspace-divider"><span>OR</span></div>
+          <form id="join-workspace-form">
+            <label class="form-field">Team invite code<input id="workspace-invite-input" maxlength="10" required autocomplete="off" placeholder="Enter your invite code"></label>
+            <button class="button button-secondary auth-submit" type="submit">Join workspace</button>
+          </form>
+          <button id="setup-sign-out-button" class="text-button auth-toggle" type="button">Sign out</button>
+        </section>
+        <p id="auth-feedback" class="auth-feedback" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+    <div class="app-shell" hidden>
       <aside class="sidebar">
         <a class="brand" href="#" aria-label="Supply Room home">
           <span class="brand-mark" aria-hidden="true">s</span>
@@ -18,7 +50,7 @@
         <div class="workspace-label">WORKSPACE</div>
         <div class="practice-switcher">
           <span class="practice-icon">✳</span>
-          <span><strong>Northside Dental</strong><small>General dentistry</small></span>
+          <span><strong id="practice-name">Practice workspace</strong><small>Invite code: <span id="workspace-invite-code">—</span></small></span>
           <span class="switcher-chevron" aria-hidden="true">⌄</span>
         </div>
         <nav class="side-nav" aria-label="Main navigation">
@@ -28,11 +60,11 @@
           <a class="nav-link" href="#reorder-panel"><span class="nav-icon">↻</span>Reorder queue<span class="nav-dot" id="nav-dot"></span></a>
         </nav>
         <div class="sidebar-bottom">
-          <div class="cloud-status"><span class="cloud-icon">▤</span><span><strong>Practice workspace</strong><small>Saved on this browser</small></span><i></i></div>
+          <div class="cloud-status"><span class="cloud-icon">▤</span><span><strong>Practice workspace</strong><small id="sync-status">Connecting…</small></span><i></i></div>
           <div class="profile">
             <div class="avatar">MR</div>
-            <span><strong>Morgan Reed</strong><small>Office manager</small></span>
-            <button class="more-button" aria-label="Profile options">···</button>
+            <span><strong id="profile-name">Practice member</strong><small>Signed in</small></span>
+            <button class="more-button" id="sign-out-button" type="button" aria-label="Sign out" title="Sign out">↪</button>
           </div>
         </div>
       </aside>

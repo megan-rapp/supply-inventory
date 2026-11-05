@@ -1,10 +1,25 @@
 # Supply Room
 
-A standalone inventory dashboard prototype for a dental practice. It tracks everyday supplies, supplier websites and optional online-order logins, order cadence, procedure links, a configurable monthly budget, and durable equipment purchase, warranty, and repair records.
+A dental practice inventory app for tracking everyday supplies, supplier websites and optional online-order logins, order cadence, procedure links, a configurable monthly budget, and durable equipment purchase, warranty, and repair records. Supabase provides email/password sign-in and a shared practice workspace; Vercel builds and hosts the app.
 
-## Run
+## Run locally
 
-Open `index.html` in a modern browser. The starter supply inventory is sample data. Changes are saved in that browser's local storage; this prototype does not connect to TDO12 or sync between devices.
+1. Create a Supabase project and run [`supabase-schema.sql`](./supabase-schema.sql) in its SQL Editor.
+2. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the Supabase project API settings.
+3. Run `npm install`, then `npm run dev`.
+
+The first account can create a practice workspace and share its invite code with other team members. Each teammate signs up and joins using that code. Inventory, equipment, expenses, budget, and categories sync to the workspace, including live updates. If two people edit at the same time, the app detects the conflict and asks them to reload rather than overwrite newer cloud data. On the first workspace creation, existing browser data seeds the new workspace; when joining an existing workspace, its cloud data is used.
+
+## Deploy to Vercel
+
+1. Push this repository to GitHub and import it in Vercel. Vercel uses the included `vercel.json` and `npm run build`.
+2. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as Vercel environment variables for the deployments you use, then redeploy.
+3. In Supabase Authentication settings, set the production Site URL and add your Vercel deployment URL to the allowed redirect URLs. Configure the local URL too if testing locally. Email confirmation can remain enabled; new users will need to confirm before signing in.
+4. Open the deployed app, create an account, create the practice workspace, and share the displayed invite code with the team.
+
+Only use the Supabase project URL and public anon/publishable key in Vercel. Never expose a `service_role` key in this browser app. Keep `.env.local` out of source control. The schema enables row-level security and limits workspace access to authenticated members.
+
+The app still does not connect to TDO12 or sync procedure usage automatically.
 
 ## Project notes
 
