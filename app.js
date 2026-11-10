@@ -9,6 +9,7 @@ const EXPENSES_KEY = 'supply-room-expenses-v1';
 const BUDGET_KEY = 'supply-room-monthly-budget-v1';
 const CATEGORIES_KEY = 'supply-room-categories-v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
+let isDemoMode = false;
 const DEFAULT_CATEGORIES = {
   clinical: ['Clinical disposable', 'Non-disposable'],
   office: ['Office supplies']
@@ -32,8 +33,8 @@ function daysAgo(days) {
 
 function saveBudget() {
   try {
-    if (monthlyBudget === null) localStorage.removeItem(BUDGET_KEY);
-    else localStorage.setItem(BUDGET_KEY, String(monthlyBudget));
+    if (monthlyBudget === null) localStorage.removeItem(storageKey(BUDGET_KEY));
+    else localStorage.setItem(storageKey(BUDGET_KEY), String(monthlyBudget));
   } catch (error) {
     console.error('Unable to save monthly budget.', error);
     showToast('Could not save your monthly budget in this browser.');
@@ -43,7 +44,7 @@ function saveBudget() {
 
 function loadCategories() {
   try {
-    const saved = localStorage.getItem(CATEGORIES_KEY);
+    const saved = localStorage.getItem(storageKey(CATEGORIES_KEY));
     if (saved === null) return { clinical: [...DEFAULT_CATEGORIES.clinical], office: [...DEFAULT_CATEGORIES.office] };
     const parsed = JSON.parse(saved);
     if (!Array.isArray(parsed.clinical) || !parsed.clinical.length || !Array.isArray(parsed.office) || !parsed.office.length) {
@@ -65,7 +66,7 @@ let categories = loadCategories();
 
 function loadItems() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(storageKey(STORAGE_KEY));
     if (saved === null) return DEFAULT_ITEMS.map((item) => ({ ...item }));
     const parsed = JSON.parse(saved);
     if (!Array.isArray(parsed)) throw new Error('Saved inventory is not a list.');
@@ -110,6 +111,10 @@ const $ = (selector) => document.querySelector(selector);
 const itemDialog = $('#item-dialog');
 const quantityDialog = $('#quantity-dialog');
 
+function storageKey(key) {
+  return isDemoMode ? `${key}-demo` : key;
+}
+
 function setSyncStatus(message, state = '') {
   const status = $('#sync-status');
   status.textContent = message;
@@ -133,12 +138,12 @@ function applyWorkspaceData(data) {
   expenses = data.expenses;
   monthlyBudget = data.monthlyBudget;
   try {
-    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    localStorage.setItem(EQUIPMENT_KEY, JSON.stringify(equipment));
-    localStorage.setItem(EXPENSES_KEY, JSON.stringify(expenses));
-    if (monthlyBudget === null) localStorage.removeItem(BUDGET_KEY);
-    else localStorage.setItem(BUDGET_KEY, String(monthlyBudget));
+    localStorage.setItem(storageKey(CATEGORIES_KEY), JSON.stringify(categories));
+    localStorage.setItem(storageKey(STORAGE_KEY), JSON.stringify(items));
+    localStorage.setItem(storageKey(EQUIPMENT_KEY), JSON.stringify(equipment));
+    localStorage.setItem(storageKey(EXPENSES_KEY), JSON.stringify(expenses));
+    if (monthlyBudget === null) localStorage.removeItem(storageKey(BUDGET_KEY));
+    else localStorage.setItem(storageKey(BUDGET_KEY), String(monthlyBudget));
   } catch (error) {
     console.warn('Workspace loaded, but the browser cache could not be updated.', error);
   }
@@ -227,6 +232,7 @@ function showAuthScreen(message = '', setupWorkspace = false) {
   $('#auth-screen').hidden = false;
   $('#auth-form').hidden = setupWorkspace;
   $('#auth-toggle').hidden = setupWorkspace;
+  $('#demo-button').hidden = setupWorkspace || Boolean(currentUser);
   $('#workspace-setup').hidden = !setupWorkspace;
   if (setupWorkspace) {
     $('#auth-title').textContent = 'Set up your workspace';
@@ -241,6 +247,7 @@ function showAuthScreen(message = '', setupWorkspace = false) {
 }
 
 async function openWorkspace(user) {
+  if (isDemoMode) return;
   if (!user || currentUser?.id === user.id && (isHydrated || loadingUserId === user.id)) return;
   currentUser = user;
   currentWorkspaceId = null;
@@ -300,13 +307,13 @@ async function openWorkspace(user) {
 
 function initializeAuth() {
   if (!supabase) {
-    $('#auth-description').textContent = 'Connect this deployment to Supabase to sign in and sync your practice data.';
-    $('#auth-feedback').textContent = 'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your Vercel project settings, then redeploy.';
     $('#auth-form').hidden = true;
     $('#auth-toggle').hidden = true;
+    startDemoMode();
     return;
   }
   supabase.auth.onAuthStateChange((_event, session) => {
+    if (isDemoMode) return;
     if (session?.user) {
       openWorkspace(session.user).catch((error) => {
         console.error('Unable to open the workspace.', error);
@@ -327,6 +334,7 @@ function initializeAuth() {
   });
   supabase.auth.getSession().then(({ data, error }) => {
     if (error) throw error;
+    if (isDemoMode) return;
     if (data.session?.user) return openWorkspace(data.session.user);
     showAuthScreen();
   }).catch((error) => {
@@ -334,6 +342,33 @@ function initializeAuth() {
     showAuthScreen('Could not connect to Supabase. Check your configuration and try again.');
   });
 }
+
+function startDemoMode() {
+  isDemoMode = true;
+  categories = loadCategories();
+  items = loadItems();
+  equipment = loadStoredList(EQUIPMENT_KEY, []);
+  expenses = loadStoredList(EXPENSES_KEY, []);
+  monthlyBudget = loadBudget();
+  currentUser = null;
+  currentWorkspaceId = null;
+  isHydrated = false;
+  $('.app-shell').hidden = false;
+  $('#auth-screen').hidden = true;
+  $('#practice-name').textContent = 'Demo practice';
+  $('#workspace-invite-code').closest('small').hidden = true;
+  $('#profile-name').textContent = 'Demo user';
+  $('.profile small').textContent = 'Demo mode';
+  $('.avatar').textContent = 'D';
+  $('.top-avatar').textContent = 'D';
+  $('#sign-out-button').hidden = true;
+  $('.cloud-status strong').textContent = 'Demo data';
+  setSyncStatus('Saved in this browser', 'saved');
+  $('#demo-notice').hidden = false;
+  render();
+}
+
+$('#demo-button').addEventListener('click', startDemoMode);
 
 $('#auth-form').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -431,7 +466,7 @@ $('#setup-sign-out-button').addEventListener('click', signOut);
 
 function loadStoredList(key, fallback) {
   try {
-    const saved = localStorage.getItem(key);
+    const saved = localStorage.getItem(storageKey(key));
     if (saved === null) return fallback;
     const parsed = JSON.parse(saved);
     if (!Array.isArray(parsed)) throw new Error(`Saved data for ${key} is not a list.`);
@@ -444,7 +479,7 @@ function loadStoredList(key, fallback) {
 
 function loadBudget() {
   try {
-    const saved = localStorage.getItem(BUDGET_KEY);
+    const saved = localStorage.getItem(storageKey(BUDGET_KEY));
     if (saved === null) return null;
     const parsed = Number(saved);
     if (!Number.isFinite(parsed) || parsed < 0) throw new Error('Saved monthly budget is invalid.');
@@ -457,7 +492,7 @@ function loadBudget() {
 
 function saveItems() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(storageKey(STORAGE_KEY), JSON.stringify(items));
     $('#toast').dataset.storageError = '';
   } catch (error) {
     console.error('Unable to save inventory.', error);
@@ -468,7 +503,7 @@ function saveItems() {
 
 function saveEquipment() {
   try {
-    localStorage.setItem(EQUIPMENT_KEY, JSON.stringify(equipment));
+    localStorage.setItem(storageKey(EQUIPMENT_KEY), JSON.stringify(equipment));
   } catch (error) {
     console.error('Unable to save equipment records.', error);
     showToast('Could not save your equipment in this browser.');
@@ -478,7 +513,7 @@ function saveEquipment() {
 
 function saveExpenses() {
   try {
-    localStorage.setItem(EXPENSES_KEY, JSON.stringify(expenses));
+    localStorage.setItem(storageKey(EXPENSES_KEY), JSON.stringify(expenses));
   } catch (error) {
     console.error('Unable to save purchase records.', error);
     showToast('Could not save your purchase record in this browser.');
@@ -947,7 +982,7 @@ function saveCategories() {
   }
   categories[categoryDraftType] = values;
   try {
-    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+    localStorage.setItem(storageKey(CATEGORIES_KEY), JSON.stringify(categories));
   } catch (error) {
     console.error('Unable to save inventory categories.', error);
     showToast('Could not save your categories in this browser.');
@@ -1431,7 +1466,7 @@ $('#csv-file').addEventListener('change', async (event) => {
           : null
       };
     });
-    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(importedCategories));
+    localStorage.setItem(storageKey(CATEGORIES_KEY), JSON.stringify(importedCategories));
     categories = importedCategories;
     items = [...items, ...created];
     saveItems();
@@ -1465,3 +1500,4 @@ $('#export-button').addEventListener('click', () => {
 });
 
 render();
+initializeAuth();

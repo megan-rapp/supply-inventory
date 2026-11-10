@@ -10,6 +10,8 @@ A dental practice inventory app for tracking everyday supplies, supplier website
 
 The first account can create a practice workspace and share its invite code with other team members. Each teammate signs up and joins using that code. Inventory, equipment, expenses, budget, and categories sync to the workspace, including live updates. If two people edit at the same time, the app detects the conflict and asks them to reload rather than overwrite newer cloud data. On the first workspace creation, existing browser data seeds the new workspace; when joining an existing workspace, its cloud data is used.
 
+If Supabase is not configured, the app opens its demo workspace automatically. When Supabase is configured, select **Preview demo data** on the sign-in screen. Demo changes are stored only in that browser and are separate from practice workspace data.
+
 ## Deploy to Vercel
 
 1. Push this repository to GitHub and import it in Vercel. Vercel uses the included `vercel.json` and `npm run build`.
