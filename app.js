@@ -238,7 +238,7 @@ function showAuthScreen(message = '', setupWorkspace = false) {
     $('#auth-title').textContent = 'Set up your workspace';
     $('#auth-description').textContent = 'Create a workspace for your practice or join your team.';
   } else {
-    $('#auth-title').textContent = signUpMode ? 'Create your account' : 'Sign in to Supply Room';
+    $('#auth-title').textContent = signUpMode ? 'Create your account' : 'Sign in to TDO Software';
     $('#auth-description').textContent = signUpMode
       ? 'Create an account to start a synced practice workspace.'
       : 'Your practice inventory, available wherever you work.';
@@ -398,7 +398,7 @@ $('#auth-form').addEventListener('submit', async (event) => {
 
 $('#auth-toggle').addEventListener('click', () => {
   signUpMode = !signUpMode;
-  $('#auth-title').textContent = signUpMode ? 'Create your account' : 'Sign in to Supply Room';
+  $('#auth-title').textContent = signUpMode ? 'Create your account' : 'Sign in to TDO Software';
   $('#auth-description').textContent = signUpMode
     ? 'Create an account to start a synced practice workspace.'
     : 'Your practice inventory, available wherever you work.';
@@ -1036,7 +1036,6 @@ function recordExpense(expense) {
   return record;
 }
 
-$('#today-label').textContent = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date());
 $('#add-item-button').addEventListener('click', () => openItemDialog());
 $('#empty-add-button').addEventListener('click', () => openItemDialog());
 $('#item-category').addEventListener('change', updateItemCategoryFields);
